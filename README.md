@@ -1,16 +1,43 @@
 # Privesc Playground
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
 ![Tests](https://img.shields.io/badge/Tests-110%20passing-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-A Linux privilege escalation checker — detects 22 escalation vectors including SUID/SGID abuse, sudo misconfigurations, dangerous Linux capabilities, Docker socket exposure, NFS no_root_squash, kernel CVEs, and more.
+Linux privilege escalation checker. Scans a live system for 22 escalation vectors — SUID/SGID abuse, sudo misconfigurations, dangerous Linux capabilities, Docker socket exposure, NFS no_root_squash, kernel CVEs, and more. Produces a prioritized report with exploit demos and remediation steps. No exploitation is performed — all checks are read-only.
 
 ---
 
-## How It Works
+## Example Output
 
-The tool builds a snapshot of the system state (SUID files, sudo rules, group memberships, writable paths, capabilities, etc.) and runs every technique check against it. No exploitation is performed — checks are read-only and produce a prioritized finding report.
+```
+════════════════════════════════════════════════════════════
+  penNULL Privesc Checker — Scan Report
+════════════════════════════════════════════════════════════
+  Host   : prod-server-01
+  User   : deploy
+  Kernel : 5.4.0-42-generic
+
+SUMMARY
+  Total findings : 4
+  Critical : 2
+  High     : 1
+  Medium   : 1
+  Risk score     : 100 / 100 (CRITICAL)
+
+[T13] 🔴 Dangerous Group Membership
+  Severity : CRITICAL
+  Category : Dangerous Group Membership
+  Evidence :
+    • Member of 'docker' group → docker run -v /:/host --rm -it alpine chroot /host /bin/bash
+  Mitigation : Remove users from docker/lxd/disk groups unless strictly necessary.
+
+[T03] 🔴 Sudo NOPASSWD GTFOBin
+  Severity : CRITICAL
+  Evidence :
+    • NOPASSWD: /usr/bin/find — GTFOBins exploit: sudo find / -exec /bin/bash \;
+  Mitigation : Remove NOPASSWD entries. Restrict sudo to specific commands.
+```
 
 ---
 
@@ -34,12 +61,14 @@ The tool builds a snapshot of the system state (SUID files, sudo rules, group me
 | T14 | Docker socket accessible | CRITICAL |
 | T15 | Privileged container escape | CRITICAL |
 | T16 | NFS no_root_squash | HIGH |
-| T17 | Kernel LPE — known CVE signatures | CRITICAL |
+| T17 | Kernel LPE — known CVE signatures (DirtyCow, OverlayFS) | CRITICAL |
 | T18 | SGID dangerous binary | MEDIUM |
 | T19 | LD_PRELOAD in environment | MEDIUM |
 | T20 | World-writable trusted directory | HIGH |
 | T21 | Dot (.) in PATH | MEDIUM |
 | T22 | Writable systemd service unit | HIGH |
+
+Each finding includes: MITRE ATT&CK mapping, evidence from the live system, exploit demo (educational), and remediation command.
 
 ---
 
@@ -51,25 +80,35 @@ pip install -r requirements.txt
 # Scan the current system
 python -m src
 
-# JSON output
+# JSON output (for SIEM integration)
 python -m src --format json
 
 # Save report to file
 python -m src --format text --output report.txt
 
-# No color
+# No ANSI colors (for logging)
 python -m src --no-color
 ```
 
 ---
 
-## Output Formats
+## How It Works
 
-| Format | Description |
-|--------|-------------|
-| `console` | ANSI-colored terminal output (default) |
-| `text` | Plain text, no ANSI codes |
-| `json` | Machine-readable structured findings |
+```
+Live System
+    │
+    ▼
+collector.py  ─── read-only OS probes ──→  CheckContext
+    │                                        (suid_files, sudo_entries,
+    │                                         groups, capabilities, ...)
+    ▼
+scanner.py    ─── runs all 22 checks ──→  ScanReport
+    │
+    ▼
+report.py     ─── console / text / JSON
+```
+
+Tests supply synthetic `CheckContext` objects directly — no real system needed.
 
 ---
 
@@ -77,7 +116,7 @@ python -m src --no-color
 
 ```bash
 pytest tests/ -v
-# 110 tests covering all 22 techniques
+# 110 tests — all 22 techniques, scanner integration, report rendering
 ```
 
 ---
@@ -93,7 +132,7 @@ src/
 ├── report.py       ← Console / text / JSON renderer
 └── __main__.py     ← CLI entry point
 tests/
-└── test_privesc.py ← 110 tests (synthetic contexts, no real system calls)
+└── test_privesc.py ← 110 tests
 ```
 
 ---
@@ -103,7 +142,7 @@ tests/
 - [GTFOBins](https://gtfobins.github.io/)
 - [LinPEAS](https://github.com/carlospolop/PEASS-ng)
 - [HackTricks — Linux Privesc](https://book.hacktricks.xyz/linux-hardening/privilege-escalation)
-- MITRE ATT&CK: [T1548 — Abuse Elevation Control Mechanism](https://attack.mitre.org/techniques/T1548/)
+- MITRE ATT&CK: [T1548](https://attack.mitre.org/techniques/T1548/)
 
 ---
 
